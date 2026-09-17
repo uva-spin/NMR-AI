@@ -14,6 +14,7 @@ command's options.
 | Fit raw UVA-ND3 sweeps | `python tools/match_uva_nd3.py` |
 | Plot your saved signal fits | `python tools/plot_fit.py` |
 | Generate examples from the single-site fits | `python tools/generate_matched_data.py` |
+| Combine compatible generated datasets | `python tools/combine_datasets.py` |
 | Train a network | `python tools/train_model.py` |
 | Predict with a saved model | `python tools/predict.py` |
 | Analyze prediction errors | `python tools/analyze_predictions.py` |
@@ -28,6 +29,10 @@ command's options.
 | [fit_tuned_baseline.py](fit_tuned_baseline.py), [baseline_parameters.py](baseline_parameters.py) | Baseline fitting and parameter definitions |
 | [learning_data.py](learning_data.py) | Input grid, channels, units, and preprocessing |
 | [nmr_lab.py](nmr_lab.py) | Simulation, calibration, networks, and grouped data splits |
+
+Architectures include `mlp`, `dnn`, `dnn_extra`, `compact`, and
+`physics_multiscale`. The extra-layer DNN is for the advanced targeted-accuracy
+challenge; compare it against the best data-only `dnn` result.
 
 ## Further exercises and maintenance
 

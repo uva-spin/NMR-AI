@@ -7,7 +7,7 @@ from circuit import Circuit, detector_voltage, nominal_circuit
 from lineshape import pake_susceptibility
 
 from learning_data import BINS, FREQUENCY, FREQUENCY_HZ, integration_weights, make_features
-ARCHITECTURES = ("mlp", "dnn", "compact", "physics_multiscale")
+ARCHITECTURES = ("mlp", "dnn", "dnn_extra", "compact", "physics_multiscale")
 
 
 def thermal_polarization(frequency_hz, temperature_k=1.5):
@@ -142,6 +142,20 @@ class DeepPolarizationDNN(nn.Module):
         return self.net(x)
 
 
+class ExtraLayerPolarizationDNN(nn.Module):
+    """Four hidden dense layers for the targeted-complexity challenge."""
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Flatten(), nn.Linear(2*BINS, 256), nn.GELU(),
+            nn.Linear(256, 192), nn.GELU(), nn.Linear(192, 128), nn.GELU(),
+            nn.Linear(128, 64), nn.GELU(), nn.Linear(64, 1),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
 class SmallPolarizationCNN(nn.Module):
     def __init__(self):
         super().__init__()
@@ -220,6 +234,8 @@ def build_model(architecture):
         return BasicPolarizationMLP()
     if architecture == "dnn":
         return DeepPolarizationDNN()
+    if architecture == "dnn_extra":
+        return ExtraLayerPolarizationDNN()
     if architecture == "compact":
         return SmallPolarizationCNN()
     if architecture == "physics_multiscale":

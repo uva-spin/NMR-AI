@@ -27,6 +27,7 @@
     <a href="#train">8 · Train the network</a>
     <a href="#predict">9 · Predict and evaluate</a>
     <a href="#next">Continue learning</a>
+    <a href="advanced.html">Advanced targeted-accuracy lab</a>
     <a href="index.html">Physics and network explanations</a>
   </nav>
   <p class="sidebar-footer">Every working spectrum has 500 bins.<br>All three signal fits include the baseline.</p>
@@ -283,6 +284,7 @@ python tools/analyze_predictions.py local-results/walkthrough/test-predictions.c
   <h2>Continue from the result you just made.</h2>
   <ul>
     <li><strong>Understand the estimator:</strong> read the <a href="index.html#network">MLP, DNN, and CNN explanation</a> and explore the saved learning curves.</li>
+    <li><strong>Take on the advanced challenge:</strong> use the new <a href="advanced.html">targeted-accuracy lab</a> to improve DNN performance in the 20-30% polarization region by changing training-data size, distribution, seeds, and then one DNN layer.</li>
     <li><strong>Compare architectures:</strong> follow the <a href="https://github.com/zetanaut/NMR-AI/blob/main/docs/reference/benchmarks.md#compare-an-mlp-dnn-and-cnn">controlled TE-area comparison commands</a>. That exercise generates its own 500-bin voltage/calibration dataset and trains three models on the same partition; its units and preprocessing are distinct from this recorded-unit path.</li>
     <li><strong>Investigate residuals:</strong> use the <a href="matching.html#noise">noise and mismatch lesson</a> and the <a href="index.html#distribution-shift">coverage and inference-shift discussion</a> before treating a fitted overlay or synthetic error as experimental validation.</li>
   </ul>

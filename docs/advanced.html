@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Advanced NMR-AI challenge lab: optimize DNN polarization accuracy in the 20-30 percent region using data distribution, dataset size, seeds, and one architecture change.">
+  <meta name="theme-color" content="#173c3a">
+  <title>NMR / AI - Advanced targeted-accuracy lab</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <script src="assets/walkthrough.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the advanced lab</a>
+<header class="topbar"><a class="brand" href="index.html">NMR <span>/</span> AI</a><span class="topbar-note">Advanced challenge lab</span><a class="repo-link" href="https://github.com/zetanaut/NMR-AI">View on GitHub ↗</a></header>
+<div class="layout">
+<aside class="sidebar">
+  <p class="eyebrow">Targeted accuracy</p>
+  <nav aria-label="Advanced lab sections">
+    <a href="walkthrough.html">Back to the guided walkthrough</a>
+    <a href="#start" class="active">The challenge</a>
+    <a href="#contract">1 · Define the target</a>
+    <a href="#testsets">2 · Freeze test sets</a>
+    <a href="#datasets">3 · Design training data</a>
+    <a href="#train">4 · Train the baseline DNN</a>
+    <a href="#evaluate">5 · Evaluate by P band</a>
+    <a href="#curves">6 · Build learning curves</a>
+    <a href="#complexity">7 · Add one DNN layer</a>
+    <a href="#statistics">8 · Compare seed statistics</a>
+    <a href="#report">Final report</a>
+  </nav>
+  <p class="sidebar-footer">Freeze the test set.<br>Change one thing at a time.</p>
+</aside>
+<main id="main">
+<section id="start" class="hero">
+  <p class="eyebrow">Advanced lab · after the nine-step walkthrough</p>
+  <h1>Improve the DNN where it matters:<br><em>20% to 30% polarization.</em></h1>
+  <p class="lede">Your job is to optimize prediction accuracy in the signed bands −30% to −20% and +20% to +30%. First use only additional training data and the distribution of that data. Only after finding that limit may you change the DNN by adding one layer.</p>
+  <div class="hero-actions"><a class="button" href="#contract">Start the challenge ↓</a><a class="text-link" href="walkthrough.html">Return to the basic walkthrough →</a></div>
+  <aside class="note"><h3>What makes this different from the walkthrough?</h3><p>The walkthrough teaches the full pipeline. This lab asks you to make decisions: where to sample, how much data to generate, what metric to optimize, when more data stops helping, whether a slightly more complex DNN improves the focused region, and how much the answer changes with random seed.</p></aside>
+  <div class="table-wrap"><table><caption>Rules for a defensible comparison</caption><thead><tr><th>Rule</th><th>Why it matters</th></tr></thead><tbody>
+    <tr><td>Freeze independent test sets before tuning</td><td>Prevents choosing the design that happens to flatter one test draw.</td></tr>
+    <tr><td>Keep preprocessing, optimizer, architecture and seeds fixed during the data-only phase</td><td>Isolates the effect of more data and changed sampling distribution.</td></tr>
+    <tr><td>Report positive and negative bands separately</td><td>A small pooled score can hide a sign-dependent bias.</td></tr>
+    <tr><td>Keep a guardrail metric outside the target band</td><td>Shows the cost of specializing the model.</td></tr>
+    <tr><td>Record rows, configurations, parameters, best epoch and wall time</td><td>Performance has a computational and statistical cost.</td></tr>
+  </tbody></table></div>
+</section>
+
+<section id="contract" class="chapter">
+  <div class="chapter-label"><span>01</span><p>Declare the objective first</p></div>
+  <h2>Write the target metric before training.</h2>
+  <p>Use the matching report from walkthrough step 4. All commands below assume it exists at <code>local-results/walkthrough/single-site/matching_report.json</code>. Use fresh output paths if your walkthrough folder is different.</p>
+  <p>Your primary target is regional error in these truth-label bands:</p>
+  <ul>
+    <li><strong>Positive target:</strong> <code>0.20 ≤ P &lt; 0.30</code></li>
+    <li><strong>Negative target:</strong> <code>-0.30 ≤ P &lt; -0.20</code></li>
+  </ul>
+  <p>For each band, report event count, bias, residual width, RMSE, MAE and 95th-percentile absolute error. Use percentage points: multiply fractional-P errors by 100. Your guardrail regions are <code>0.05 ≤ |P| &lt; 0.10</code> and <code>0.40 ≤ |P| &lt; 0.50</code>.</p>
+  <div class="expected-result"><h3>Deliverable</h3><p>A one-paragraph measurement contract: target P region, primary metric, guardrail bands, allowed changes in each phase, and the fixed test-set names you will use.</p></div>
+</section>
+
+<section id="testsets" class="chapter">
+  <div class="chapter-label"><span>02</span><p>Do not tune on the final evidence</p></div>
+  <h2>Generate two fixed focused test sets.</h2>
+  <p>Each test set is tuned to the same experimental signal fits but uses a different random seed. The two signs are generated separately and then combined so the target region has enough statistics.</p>
+  <h3>Run</h3>
+<pre data-run="advanced-testsets"><code>mkdir -p local-results/advanced/raw local-results/advanced/tests
+REPORT=local-results/walkthrough/single-site/matching_report.json
+
+python tools/generate_matched_data.py --matching-report "$REPORT" \
+  --num-samples 3000 --num-configurations 150 --p-min 0.20 --p-max 0.30 \
+  --seed 900 --output local-results/advanced/raw/test-a-pos.npz
+python tools/generate_matched_data.py --matching-report "$REPORT" \
+  --num-samples 3000 --num-configurations 150 --p-min -0.30 --p-max -0.20 \
+  --seed 901 --output local-results/advanced/raw/test-a-neg.npz
+python tools/combine_datasets.py --output local-results/advanced/tests/focused-test-a.npz \
+  local-results/advanced/raw/test-a-pos.npz local-results/advanced/raw/test-a-neg.npz
+
+python tools/generate_matched_data.py --matching-report "$REPORT" \
+  --num-samples 3000 --num-configurations 150 --p-min 0.20 --p-max 0.30 \
+  --seed 1900 --output local-results/advanced/raw/test-b-pos.npz
+python tools/generate_matched_data.py --matching-report "$REPORT" \
+  --num-samples 3000 --num-configurations 150 --p-min -0.30 --p-max -0.20 \
+  --seed 1901 --output local-results/advanced/raw/test-b-neg.npz
+python tools/combine_datasets.py --output local-results/advanced/tests/focused-test-b.npz \
+  local-results/advanced/raw/test-b-pos.npz local-results/advanced/raw/test-b-neg.npz</code></pre>
+  <p>Do not inspect model performance on these test sets while choosing among training distributions. During design, use validation and a separate development prediction file if you need quick feedback. Use the two fixed tests only for selected candidates.</p>
+</section>
+
+<section id="datasets" class="chapter">
+  <div class="chapter-label"><span>03</span><p>Change the data, not the model</p></div>
+  <h2>Build broad, focused and mixed training datasets.</h2>
+  <p>The current generator samples uniformly over one interval. Use it deliberately: broad data covers the full working range, focused data covers the region you care about, and mixed data asks whether adding focused rows improves the target band without losing too much elsewhere.</p>
+  <h3>Run</h3>
+<pre data-run="advanced-datasets"><code>mkdir -p local-results/advanced/data
+
+# Broad baseline distribution.
+python tools/generate_matched_data.py --matching-report "$REPORT" \
+  --num-samples 6000 --num-configurations 300 --p-min -0.60 --p-max 0.60 \
+  --seed 42 --output local-results/advanced/data/broad-6k.npz
+
+# Focused target distribution, both signs.
+python tools/generate_matched_data.py --matching-report "$REPORT" \
+  --num-samples 3000 --num-configurations 150 --p-min 0.20 --p-max 0.30 \
+  --seed 43 --output local-results/advanced/raw/focus-pos-3k.npz
+python tools/generate_matched_data.py --matching-report "$REPORT" \
+  --num-samples 3000 --num-configurations 150 --p-min -0.30 --p-max -0.20 \
+  --seed 44 --output local-results/advanced/raw/focus-neg-3k.npz
+python tools/combine_datasets.py --output local-results/advanced/data/focused-6k.npz \
+  local-results/advanced/raw/focus-pos-3k.npz local-results/advanced/raw/focus-neg-3k.npz
+
+# Mixed distribution: broad coverage plus extra target-band rows.
+python tools/combine_datasets.py --output local-results/advanced/data/mixed-12k.npz \
+  local-results/advanced/data/broad-6k.npz local-results/advanced/data/focused-6k.npz</code></pre>
+  <aside class="note"><h3>Interpretation</h3><p>Focused-only training is not a general estimator. It is a stress test of how much target-band accuracy you can buy by spending all examples there. The mixed dataset tests a more realistic compromise. Keep both because their difference teaches the tradeoff.</p></aside>
+</section>
+
+<section id="train" class="chapter">
+  <div class="chapter-label"><span>04</span><p>First comparison: DNN only</p></div>
+  <h2>Train the same DNN on each training distribution.</h2>
+  <p>Do not change the architecture yet. Use the same optimizer settings and seeds so the comparison is about training data.</p>
+  <h3>Run</h3>
+<pre data-run="advanced-train"><code>mkdir -p local-results/advanced/models
+for name in broad-6k focused-6k mixed-12k; do
+  python tools/train_model.py \
+    --data local-results/advanced/data/${name}.npz \
+    --output-dir local-results/advanced/models/dnn-${name} \
+    --architecture dnn --epochs 80 --patience 12 \
+    --learning-rate 0.0001 --seed 42 --batch-order-seed 42 \
+    --device cpu --threads 2 --defer-test
+done</code></pre>
+  <p>If you use a GPU, keep the same device across the compared runs or record the difference. The selected checkpoint still comes from validation loss on that run's training dataset, not from the frozen focused tests.</p>
+</section>
+
+<section id="evaluate" class="chapter">
+  <div class="chapter-label"><span>05</span><p>Measure what changed</p></div>
+  <h2>Evaluate target-band errors on both fixed test sets.</h2>
+  <p>Run predictions on the two frozen focused tests. Then analyze the positive and negative target bands. The helper uses signed bands centered at <code>p0</code>; <code>--p0 0.25 --half-width 0.05</code> selects 20% to 30%.</p>
+  <h3>Run</h3>
+<pre data-run="advanced-evaluate"><code>mkdir -p local-results/advanced/predictions local-results/advanced/reports
+for model in dnn-broad-6k dnn-focused-6k dnn-mixed-12k; do
+  for test in focused-test-a focused-test-b; do
+    python tools/predict.py \
+      --model-dir local-results/advanced/models/${model} \
+      --data local-results/advanced/tests/${test}.npz \
+      --output local-results/advanced/predictions/${model}-${test}.csv
+    python tools/analyze_predictions.py \
+      local-results/advanced/predictions/${model}-${test}.csv \
+      --p0 0.25 --half-width 0.05 \
+      > local-results/advanced/reports/${model}-${test}-pos.json
+    python tools/analyze_predictions.py \
+      local-results/advanced/predictions/${model}-${test}.csv \
+      --p0 -0.25 --half-width 0.05 \
+      > local-results/advanced/reports/${model}-${test}-neg.json
+  done
+done</code></pre>
+  <p>Read the <code>signed_p_band</code> section in each JSON report. Because the fixed tests are focused, the band count should be large. If the positive and negative results disagree, report them separately rather than averaging the problem away.</p>
+  <h3>Make a compact comparison table</h3>
+<pre data-run="advanced-table"><code>python - &lt;&lt;'PY'
+import json
+from pathlib import Path
+base = Path('local-results/advanced/reports')
+for model in ['dnn-broad-6k', 'dnn-focused-6k', 'dnn-mixed-12k']:
+    for test in ['focused-test-a', 'focused-test-b']:
+        row = [model, test]
+        for sign in ['pos', 'neg']:
+            band = json.loads((base / f'{model}-{test}-{sign}.json').read_text())['signed_p_band']
+            row.append(f"{band['n']} rows, RMSE={band['rmse_percentage_points']:.3f} pp, "
+                       f"bias={band['bias_percentage_points']:.3f} pp")
+        print(' | '.join(row))
+PY</code></pre>
+</section>
+
+<section id="curves" class="chapter">
+  <div class="chapter-label"><span>06</span><p>How much data is enough?</p></div>
+  <h2>Build learning curves by adding rows.</h2>
+  <p>Repeat the data-only comparison at several sizes. A useful sequence is <code>2k</code>, <code>6k</code>, <code>12k</code> and <code>24k</code>. Keep the DNN and training settings fixed. For each size, record target-band RMSE on both test seeds, validation loss, best epoch and training time.</p>
+  <div class="table-wrap"><table><caption>Suggested learning-curve grid</caption><thead><tr><th>Dataset</th><th>Composition</th><th>Question</th></tr></thead><tbody>
+    <tr><td><code>broad-N</code></td><td>Uniform −60% to +60%</td><td>Does more broad coverage improve the target band?</td></tr>
+    <tr><td><code>focused-N</code></td><td>Half positive 20-30%, half negative −30% to −20%</td><td>What is the best target performance when you spend all rows there?</td></tr>
+    <tr><td><code>mixed-N</code></td><td>Broad rows plus focused rows</td><td>Where is the best target/general tradeoff?</td></tr>
+  </tbody></table></div>
+  <p>Stop claiming improvement when the two independent test seeds disagree as much as the apparent gain, or when target-band error plateaus while cost continues to grow. That plateau is part of the result, not a failure of the lab.</p>
+</section>
+
+<section id="complexity" class="chapter">
+  <div class="chapter-label"><span>07</span><p>Then change the model</p></div>
+  <h2>Add one hidden layer to the DNN and compare fairly.</h2>
+  <p>Only after choosing the best data-only distribution should you use the deeper DNN. The new architecture is <code>dnn_extra</code>: a four-hidden-layer dense network with an added intermediate layer. Compare it against the best ordinary <code>dnn</code> trained on the same dataset.</p>
+  <h3>Run</h3>
+<pre data-run="advanced-complexity"><code>BEST_DATA=local-results/advanced/data/mixed-12k.npz
+python tools/train_model.py \
+  --data "$BEST_DATA" \
+  --output-dir local-results/advanced/models/dnn-extra-mixed-12k \
+  --architecture dnn_extra --epochs 80 --patience 12 \
+  --learning-rate 0.0001 --seed 42 --batch-order-seed 42 \
+  --device cpu --threads 2 --defer-test</code></pre>
+  <p>Evaluate <code>dnn-extra-mixed-12k</code> on the same two fixed test sets using the commands from section 5. If the extra layer reduces training loss but not target-band test RMSE, report overfitting or optimization limits instead of calling it an improvement.</p>
+  <aside class="note"><h3>Fair comparison</h3><p>The deeper DNN must beat the best data-only DNN, not merely the original broad baseline. Report parameter count from <code>provenance.json</code>, best epoch, training time and both focused test seeds.</p></aside>
+</section>
+
+<section id="statistics" class="chapter">
+  <div class="chapter-label"><span>08</span><p>Statistics are part of the result</p></div>
+  <h2>Use two generated test sets to estimate metric stability.</h2>
+  <p>For every final candidate, compare the two focused tests side by side. The difference between <code>focused-test-a</code> and <code>focused-test-b</code> is a warning about finite simulated statistics and seed dependence. It is not an experimental uncertainty, but it tells you how much confidence to place in small metric differences.</p>
+  <p>Then make one guardrail test outside the target band. For example, generate 3,000 rows in <code>0.40 ≤ |P| &lt; 0.50</code> and another in <code>0.05 ≤ |P| &lt; 0.10</code>. If the focused model improves 20-30% but damages 40-50%, your report should say so plainly.</p>
+  <details><summary>How to discuss limits</summary><div class="details-body"><p>Possible limits include insufficient target-band examples, too few independent configurations, validation not aligned with the target metric, DNN capacity, optimization, noise ambiguity, or simulator mismatch. Do not assume more data is the cure until the learning curves show it. Do not assume a deeper DNN is the cure until it beats the best data-only DNN on both focused test seeds.</p></div></details>
+</section>
+
+<section id="report" class="chapter assignment">
+  <p class="eyebrow">Final deliverable</p>
+  <h2>Write the investigation report.</h2>
+  <ol class="assignment-list">
+    <li><strong>Objective:</strong> define the signed target bands, metric and guardrails.</li>
+    <li><strong>Data-only result:</strong> compare broad, focused and mixed datasets across at least two sizes.</li>
+    <li><strong>Learning curve:</strong> plot target-band RMSE versus training rows and state where more data stops helping.</li>
+    <li><strong>Seed stability:</strong> show results on both focused test sets and discuss whether differences are meaningful.</li>
+    <li><strong>Complexity result:</strong> compare <code>dnn</code> and <code>dnn_extra</code> on the same best dataset.</li>
+    <li><strong>Tradeoffs:</strong> report target-band improvement and any damage outside the region.</li>
+    <li><strong>Limits:</strong> state what you could not improve using data distribution or one added layer.</li>
+  </ol>
+  <p class="closing-note">The goal is not to make every number smaller. The goal is to learn which knob matters, which result is stable, and where the evidence says to stop.</p>
+</section>
+<footer><a class="brand" href="index.html">NMR <span>/</span> AI</a><p>Advanced lab · targeted data distribution · DNN complexity · metric stability</p></footer>
+<p id="copy-status" class="sr-only" aria-live="polite"></p>
+</main></div>
+</body>
+</html>
